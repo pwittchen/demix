@@ -425,6 +425,11 @@ def _validate_args(args):
         return f"Error: File not found: {args.file}"
     if args.target_key and args.transpose != 0:
         return "Error: --target-key and --transpose cannot be used together"
+    if args.target_key:
+        try:
+            parse_key(args.target_key)
+        except ValueError as e:
+            return f"Error: {e}"
     return None
 
 
