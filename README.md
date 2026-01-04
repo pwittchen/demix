@@ -100,6 +100,7 @@ demix -f <audio-file> [options]
 | `-t`, `--tempo` | Tempo factor for output audio (default: `1.0`, use `< 1.0` to slow down) |
 | `-p`, `--transpose` | Transpose pitch by semitones (default: `0`, range: `-12` to `+12`) |
 | `-k`, `--key` | Detect and display the musical key of the audio |
+| `-K`, `--target-key` | Transpose audio to target key (e.g., `C`, `Am`, `F#`, `Bb minor`) |
 | `-ss`, `--start` | Start time for cutting (format: `MM:SS` or `HH:MM:SS`) |
 | `-to`, `--end` | End time for cutting (format: `MM:SS` or `HH:MM:SS`) |
 | `-m`, `--mode` | Separation mode: `2stems`, `4stems`, or `5stems` (default: `2stems`) |
@@ -144,4 +145,13 @@ demix -f song.mp3 -k
 
 # detect key before and after transposing
 demix -f song.mp3 -k -p -3
+
+# transpose to a specific key (auto-detects current key)
+demix -f song.mp3 -K C
+
+# transpose to A minor
+demix -f song.mp3 -K Am
+
+# transpose to target key with tempo change
+demix -f song.mp3 -K "F# minor" -t 0.9
 ```

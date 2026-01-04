@@ -29,6 +29,20 @@ STEM_MODES = {
     "5stems": ["vocals", "drums", "bass", "piano", "other"],
 }
 
+# Mapping of note names to semitone values (C = 0)
+NOTE_TO_SEMITONE = {
+    "C": 0, "C#": 1, "Db": 1,
+    "D": 2, "D#": 3, "Eb": 3,
+    "E": 4, "Fb": 4, "E#": 5,
+    "F": 5, "F#": 6, "Gb": 6,
+    "G": 7, "G#": 8, "Ab": 8,
+    "A": 9, "A#": 10, "Bb": 10,
+    "B": 11, "Cb": 11, "B#": 0,
+}
+
+# Valid key names for CLI help text
+VALID_KEYS = ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"]
+
 
 def parse_time(time_str):
     """Parse time string in MM:SS or HH:MM:SS format to seconds."""
@@ -55,6 +69,80 @@ def format_time(seconds):
     if hours > 0:
         return f"{hours}:{minutes:02d}:{secs:05.2f}"
     return f"{minutes}:{secs:05.2f}"
+
+
+def _strip_scale_suffix(key_str):
+    """Strip scale suffix from key string and return (stripped_key, scale)."""
+    lower = key_str.lower()
+    suffixes = [
+        (" minor", "minor", 6), (" major", "major", 6),
+        ("min", "minor", 3), ("maj", "major", 3),
+    ]
+    for suffix, scale, length in suffixes:
+        if lower.endswith(suffix):
+            return key_str[:-length].strip(), scale
+    # Handle 'm' suffix: 'Am', 'Cm', 'C#m', 'Bbm'
+    if len(key_str) >= 2 and key_str[-1].lower() == "m":
+        # Check it's not part of accidental (second-to-last char isn't # or b)
+        if len(key_str) == 2 or (key_str[-2] != "#" and key_str[-2].lower() != "b"):
+            return key_str[:-1], "minor"
+        elif len(key_str) >= 3:
+            return key_str[:-1], "minor"
+    return key_str, "major"
+
+
+def _extract_note(key_str):
+    """Extract note name from key string. Returns note or None."""
+    if len(key_str) == 0:
+        return None
+    note = key_str[0].upper()
+    if len(key_str) > 1:
+        modifier = key_str[1]
+        if modifier == "#":
+            note += "#"
+        elif modifier.lower() == "b":
+            note += "b"
+    return note
+
+
+def parse_key(key_str):
+    """Parse a key string like 'C', 'Am', 'F# minor', 'Bbm' into (note, scale).
+
+    Returns tuple of (note, scale) where scale is 'major' or 'minor'.
+    Returns (None, None) if parsing fails.
+    """
+    if not key_str:
+        return None, None
+
+    original = key_str.strip()
+    key_str, scale = _strip_scale_suffix(original)
+    note = _extract_note(key_str)
+
+    if note is None or note not in NOTE_TO_SEMITONE:
+        raise ValueError(f"Invalid key: '{original}'. Valid keys: {', '.join(VALID_KEYS)}")
+
+    return note, scale
+
+
+def calculate_transpose_semitones(from_key, from_scale, to_key, to_scale):
+    """Calculate the number of semitones to transpose from one key to another.
+
+    Returns the shortest transposition (between -6 and +6 semitones).
+    Returns 0 if the keys are the same.
+    """
+    from_semitone = NOTE_TO_SEMITONE[from_key]
+    to_semitone = NOTE_TO_SEMITONE[to_key]
+
+    # Calculate the difference
+    diff = to_semitone - from_semitone
+
+    # Normalize to shortest path (-6 to +6)
+    if diff > 6:
+        diff -= 12
+    elif diff < -6:
+        diff += 12
+
+    return diff
 
 
 class Spinner:
@@ -293,6 +381,12 @@ def parse_args():
         help="detect and display the musical key of the audio"
     )
     parser.add_argument(
+        "-K", "--target-key",
+        metavar="KEY",
+        help="transpose audio to target key (e.g., 'C', 'Am', 'F#', 'Bbm'). "
+             "Automatically detects current key and calculates required transposition"
+    )
+    parser.add_argument(
         "-ss", "--start",
         metavar="TIME",
         help="start time for cutting (format: MM:SS or HH:MM:SS, e.g., 1:30 for 1 min 30 sec)"
@@ -329,6 +423,8 @@ def _validate_args(args):
         return "Error: --url, --search, and --file cannot be used together"
     if args.file and not os.path.isfile(args.file):
         return f"Error: File not found: {args.file}"
+    if args.target_key and args.transpose != 0:
+        return "Error: --target-key and --transpose cannot be used together"
     return None
 
 
@@ -478,6 +574,62 @@ def _detect_and_display_key(audio_file, label=None):
     return key, scale, strength
 
 
+def _calculate_target_key_transpose(audio_file, target_key_str):
+    """Calculate transposition needed to reach target key.
+
+    Returns tuple of (transpose_semitones, current_key_info, target_key_info, skip_transpose).
+    If skip_transpose is True, the audio is already in the target key.
+    """
+    # Detect current key
+    current_key, current_scale, strength = _detect_and_display_key(audio_file)
+
+    # Parse target key
+    target_key, target_scale = parse_key(target_key_str)
+
+    # Calculate semitones needed
+    semitones = calculate_transpose_semitones(current_key, current_scale, target_key, target_scale)
+
+    current_info = f"{current_key} {current_scale}"
+    target_info = f"{target_key} {target_scale}"
+
+    # Check if already in target key (same root note)
+    if semitones == 0:
+        return 0, current_info, target_info, True
+
+    return semitones, current_info, target_info, False
+
+
+def _handle_target_key(wav_file, target_key_str):
+    """Handle target key transposition. Returns transpose semitones or None on error."""
+    try:
+        parse_key(target_key_str)  # Validate early
+        semitones, current_info, target_info, skip = _calculate_target_key_transpose(
+            wav_file, target_key_str
+        )
+        if skip:
+            print(f"\033[33m!\033[0m Audio is already in {target_info}. Skipping transposition.\n")
+            return 0
+        sign = "+" if semitones > 0 else ""
+        print(f"\033[34m♪\033[0m Transposing from {current_info} to {target_info} "
+              f"({sign}{semitones} semitones)\n")
+        return semitones
+    except ValueError as e:
+        print(f"Error: {e}")
+        return None
+
+
+def _resolve_transpose(wav_file, args):
+    """Determine transpose value from args. Returns (transpose, success)."""
+    if args.target_key:
+        result = _handle_target_key(wav_file, args.target_key)
+        if result is None:
+            return 0, False
+        return result, True
+    if args.key:
+        _detect_and_display_key(wav_file)
+    return args.transpose, True
+
+
 def main():
     args = parse_args()
 
@@ -519,19 +671,20 @@ def main():
 
     wav_file, _ = _convert_source(url, args.file, dirs, start_time, end_time)
 
-    if args.key:
-        _detect_and_display_key(wav_file)
+    transpose, success = _resolve_transpose(wav_file, args)
+    if not success:
+        return
 
     _print_first_run_notice()
 
     with Spinner(f"Separating audio ({args.mode})..."):
         separate_audio(wav_file, dirs["wav"], args.mode)
 
-    effects = _convert_stems(args.tempo, args.transpose, dirs, stems)
-    _apply_effects_to_original(wav_file, dirs, args.tempo, args.transpose, effects)
+    effects = _convert_stems(args.tempo, transpose, dirs, stems)
+    _apply_effects_to_original(wav_file, dirs, args.tempo, transpose, effects)
 
-    if args.key:
-        _detect_key_after_transpose(dirs, args.transpose)
+    if args.key or args.target_key:
+        _detect_key_after_transpose(dirs, transpose)
 
     _create_accompaniment_video(dirs, args.mode)
 

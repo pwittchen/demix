@@ -11,10 +11,14 @@ from demix import (  # noqa: E402
     __version__,
     DEFAULT_VIDEO_RESOLUTION,
     STEM_MODES,
+    NOTE_TO_SEMITONE,
+    VALID_KEYS,
     Spinner,
     parse_args,
     parse_time,
     format_time,
+    parse_key,
+    calculate_transpose_semitones,
     remove_dir,
     clean,
     convert_wav_to_mp3,
@@ -1235,3 +1239,365 @@ class TestMainWithKeyDetection:
         mock_detect_key.assert_called_once()
         captured = capsys.readouterr()
         assert "after transpose" not in captured.out
+
+
+class TestNoteToSemitone:
+    def test_note_mapping_complete(self):
+        """All standard notes should be in the mapping."""
+        expected = ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"]
+        for note in expected:
+            assert note in NOTE_TO_SEMITONE
+
+    def test_enharmonic_equivalents(self):
+        """Enharmonic equivalents should map to same semitone."""
+        assert NOTE_TO_SEMITONE["C#"] == NOTE_TO_SEMITONE["Db"]
+        assert NOTE_TO_SEMITONE["D#"] == NOTE_TO_SEMITONE["Eb"]
+        assert NOTE_TO_SEMITONE["F#"] == NOTE_TO_SEMITONE["Gb"]
+        assert NOTE_TO_SEMITONE["G#"] == NOTE_TO_SEMITONE["Ab"]
+        assert NOTE_TO_SEMITONE["A#"] == NOTE_TO_SEMITONE["Bb"]
+
+    def test_semitone_values(self):
+        """Check specific semitone values."""
+        assert NOTE_TO_SEMITONE["C"] == 0
+        assert NOTE_TO_SEMITONE["D"] == 2
+        assert NOTE_TO_SEMITONE["E"] == 4
+        assert NOTE_TO_SEMITONE["F"] == 5
+        assert NOTE_TO_SEMITONE["G"] == 7
+        assert NOTE_TO_SEMITONE["A"] == 9
+        assert NOTE_TO_SEMITONE["B"] == 11
+
+
+class TestValidKeys:
+    def test_valid_keys_count(self):
+        """Should have 17 valid key names (including enharmonics)."""
+        assert len(VALID_KEYS) == 17
+
+
+class TestParseKey:
+    def test_parse_key_none(self):
+        assert parse_key(None) == (None, None)
+
+    def test_parse_key_empty(self):
+        assert parse_key("") == (None, None)
+
+    def test_parse_key_simple_major(self):
+        note, scale = parse_key("C")
+        assert note == "C"
+        assert scale == "major"
+
+    def test_parse_key_sharp_major(self):
+        note, scale = parse_key("F#")
+        assert note == "F#"
+        assert scale == "major"
+
+    def test_parse_key_flat_major(self):
+        note, scale = parse_key("Bb")
+        assert note == "Bb"
+        assert scale == "major"
+
+    def test_parse_key_simple_minor_suffix(self):
+        note, scale = parse_key("Am")
+        assert note == "A"
+        assert scale == "minor"
+
+    def test_parse_key_sharp_minor_suffix(self):
+        note, scale = parse_key("C#m")
+        assert note == "C#"
+        assert scale == "minor"
+
+    def test_parse_key_flat_minor_suffix(self):
+        note, scale = parse_key("Bbm")
+        assert note == "Bb"
+        assert scale == "minor"
+
+    def test_parse_key_major_word(self):
+        note, scale = parse_key("G major")
+        assert note == "G"
+        assert scale == "major"
+
+    def test_parse_key_minor_word(self):
+        note, scale = parse_key("E minor")
+        assert note == "E"
+        assert scale == "minor"
+
+    def test_parse_key_min_suffix(self):
+        note, scale = parse_key("Dmin")
+        assert note == "D"
+        assert scale == "minor"
+
+    def test_parse_key_maj_suffix(self):
+        note, scale = parse_key("Amaj")
+        assert note == "A"
+        assert scale == "major"
+
+    def test_parse_key_lowercase(self):
+        note, scale = parse_key("c")
+        assert note == "C"
+        assert scale == "major"
+
+    def test_parse_key_lowercase_minor(self):
+        note, scale = parse_key("am")
+        assert note == "A"
+        assert scale == "minor"
+
+    def test_parse_key_lowercase_sharp(self):
+        note, scale = parse_key("f#")
+        assert note == "F#"
+        assert scale == "major"
+
+    def test_parse_key_lowercase_flat(self):
+        note, scale = parse_key("bb")
+        assert note == "Bb"
+        assert scale == "major"
+
+    def test_parse_key_invalid_raises(self):
+        with pytest.raises(ValueError) as excinfo:
+            parse_key("X")
+        assert "Invalid key" in str(excinfo.value)
+
+    def test_parse_key_invalid_shows_valid_keys(self):
+        with pytest.raises(ValueError) as excinfo:
+            parse_key("H")
+        assert "Valid keys:" in str(excinfo.value)
+
+
+class TestCalculateTransposeSemitones:
+    def test_same_key_returns_zero(self):
+        result = calculate_transpose_semitones("C", "major", "C", "major")
+        assert result == 0
+
+    def test_same_key_different_scale_returns_zero(self):
+        # Same root note, different scale - still 0 semitones
+        result = calculate_transpose_semitones("A", "minor", "A", "major")
+        assert result == 0
+
+    def test_c_to_g_is_negative_5(self):
+        result = calculate_transpose_semitones("C", "major", "G", "major")
+        # C=0, G=7, so 7-0=7. Since 7 > 6, it normalizes to 7-12=-5
+        assert result == -5
+
+    def test_g_to_c_is_positive_5(self):
+        result = calculate_transpose_semitones("G", "major", "C", "major")
+        # G=7, C=0, so 0-7=-7, which is < -6, so -7+12=5
+        assert result == 5
+
+    def test_c_to_f_sharp(self):
+        result = calculate_transpose_semitones("C", "major", "F#", "major")
+        # C=0, F#=6, so 6-0=6
+        assert result == 6
+
+    def test_f_sharp_to_c(self):
+        result = calculate_transpose_semitones("F#", "major", "C", "major")
+        # F#=6, C=0, so 0-6=-6
+        assert result == -6
+
+    def test_a_to_c(self):
+        result = calculate_transpose_semitones("A", "minor", "C", "major")
+        # A=9, C=0, so 0-9=-9, which is < -6, so -9+12=3
+        assert result == 3
+
+    def test_c_to_a(self):
+        result = calculate_transpose_semitones("C", "major", "A", "minor")
+        # C=0, A=9, so 9-0=9, which is > 6, so 9-12=-3
+        assert result == -3
+
+    def test_enharmonic_equivalent(self):
+        result1 = calculate_transpose_semitones("C", "major", "C#", "major")
+        result2 = calculate_transpose_semitones("C", "major", "Db", "major")
+        assert result1 == result2 == 1
+
+
+class TestParseArgsTargetKey:
+    def test_target_key_default_none(self):
+        with patch.object(sys, "argv", ["demix", "-u", "https://test.com"]):
+            args = parse_args()
+            assert args.target_key is None
+
+    def test_target_key_short_form(self):
+        with patch.object(sys, "argv", ["demix", "-u", "https://test.com", "-K", "Am"]):
+            args = parse_args()
+            assert args.target_key == "Am"
+
+    def test_target_key_long_form(self):
+        with patch.object(sys, "argv", ["demix", "-u", "https://test.com", "--target-key", "F#"]):
+            args = parse_args()
+            assert args.target_key == "F#"
+
+    def test_target_key_with_space(self):
+        with patch.object(sys, "argv", ["demix", "-u", "https://test.com", "-K", "C minor"]):
+            args = parse_args()
+            assert args.target_key == "C minor"
+
+
+class TestValidateArgsTargetKey:
+    @patch("demix.cli.check_ffmpeg", return_value=True)
+    @patch.object(sys, "argv", ["demix", "-u", "https://test.com", "-K", "Am", "-p", "3"])
+    def test_target_key_and_transpose_error(self, mock_check, capsys):
+        main()
+        captured = capsys.readouterr()
+        assert "--target-key and --transpose cannot be used together" in captured.out
+
+
+class TestMainWithTargetKey:
+    @patch("demix.cli.detect_key", return_value=("C", "major", 0.85))
+    @patch("demix.cli.create_empty_mkv_with_audio")
+    @patch("demix.cli.convert_wav_to_mp3")
+    @patch("demix.cli.separate_audio")
+    @patch("demix.cli.convert_to_wav")
+    @patch("demix.cli.remove_dir")
+    @patch("demix.cli.check_ffmpeg", return_value=True)
+    @patch("demix.cli.os.path.exists", return_value=True)
+    @patch("demix.cli.os.path.isfile", return_value=True)
+    @patch("demix.cli.os.makedirs")
+    @patch.object(sys, "argv", ["demix", "-f", "/path/to/song.mp3", "-K", "G"])
+    def test_main_target_key_transpose_up(
+        self, mock_makedirs, mock_isfile, mock_exists, mock_check, mock_remove,
+        mock_convert_wav, mock_separate, mock_wav_to_mp3, mock_mkv, mock_detect_key, capsys
+    ):
+        """Transposing from C major to G major should be -5 semitones."""
+        main()
+        mock_detect_key.assert_called()
+        captured = capsys.readouterr()
+        assert "Detected key: C major" in captured.out
+        assert "Transposing from C major to G major" in captured.out
+        assert "-5 semitones" in captured.out
+
+    @patch("demix.cli.detect_key", return_value=("G", "major", 0.85))
+    @patch("demix.cli.create_empty_mkv_with_audio")
+    @patch("demix.cli.convert_wav_to_mp3")
+    @patch("demix.cli.separate_audio")
+    @patch("demix.cli.convert_to_wav")
+    @patch("demix.cli.remove_dir")
+    @patch("demix.cli.check_ffmpeg", return_value=True)
+    @patch("demix.cli.os.path.exists", return_value=True)
+    @patch("demix.cli.os.path.isfile", return_value=True)
+    @patch("demix.cli.os.makedirs")
+    @patch.object(sys, "argv", ["demix", "-f", "/path/to/song.mp3", "-K", "C"])
+    def test_main_target_key_transpose_down(
+        self, mock_makedirs, mock_isfile, mock_exists, mock_check, mock_remove,
+        mock_convert_wav, mock_separate, mock_wav_to_mp3, mock_mkv, mock_detect_key, capsys
+    ):
+        """Transposing from G major to C major should be +5 semitones."""
+        main()
+        captured = capsys.readouterr()
+        assert "Transposing from G major to C major" in captured.out
+        assert "+5 semitones" in captured.out
+
+    @patch("demix.cli.detect_key", return_value=("A", "minor", 0.85))
+    @patch("demix.cli.create_empty_mkv_with_audio")
+    @patch("demix.cli.convert_wav_to_mp3")
+    @patch("demix.cli.separate_audio")
+    @patch("demix.cli.convert_to_wav")
+    @patch("demix.cli.remove_dir")
+    @patch("demix.cli.check_ffmpeg", return_value=True)
+    @patch("demix.cli.os.path.exists", return_value=True)
+    @patch("demix.cli.os.path.isfile", return_value=True)
+    @patch("demix.cli.os.makedirs")
+    @patch.object(sys, "argv", ["demix", "-f", "/path/to/song.mp3", "-K", "Am"])
+    def test_main_target_key_already_in_key(
+        self, mock_makedirs, mock_isfile, mock_exists, mock_check, mock_remove,
+        mock_convert_wav, mock_separate, mock_wav_to_mp3, mock_mkv, mock_detect_key, capsys
+    ):
+        """When music is already in target key, should skip transposition."""
+        main()
+        captured = capsys.readouterr()
+        assert "Audio is already in A minor" in captured.out
+        assert "Skipping transposition" in captured.out
+
+    @patch("demix.cli.detect_key", return_value=("C", "major", 0.85))
+    @patch("demix.cli.create_empty_mkv_with_audio")
+    @patch("demix.cli.convert_wav_to_mp3")
+    @patch("demix.cli.separate_audio")
+    @patch("demix.cli.convert_to_wav")
+    @patch("demix.cli.remove_dir")
+    @patch("demix.cli.check_ffmpeg", return_value=True)
+    @patch("demix.cli.os.path.exists", return_value=True)
+    @patch("demix.cli.os.path.isfile", return_value=True)
+    @patch("demix.cli.os.makedirs")
+    @patch.object(sys, "argv", ["demix", "-f", "/path/to/song.mp3", "-K", "Cm"])
+    def test_main_target_key_same_root_different_scale(
+        self, mock_makedirs, mock_isfile, mock_exists, mock_check, mock_remove,
+        mock_convert_wav, mock_separate, mock_wav_to_mp3, mock_mkv, mock_detect_key, capsys
+    ):
+        """C major to C minor - same root, should skip."""
+        main()
+        captured = capsys.readouterr()
+        assert "Audio is already in C minor" in captured.out
+
+    @patch("demix.cli.check_ffmpeg", return_value=True)
+    @patch("demix.cli.os.path.isfile", return_value=True)
+    @patch.object(sys, "argv", ["demix", "-f", "/path/to/song.mp3", "-K", "X"])
+    def test_main_target_key_invalid(self, mock_isfile, mock_check, capsys):
+        """Invalid target key should show error."""
+        main()
+        captured = capsys.readouterr()
+        assert "Invalid key" in captured.out
+
+    @patch("demix.cli.detect_key", return_value=("E", "minor", 0.85))
+    @patch("demix.cli.create_empty_mkv_with_audio")
+    @patch("demix.cli.convert_wav_to_mp3")
+    @patch("demix.cli.separate_audio")
+    @patch("demix.cli.convert_to_wav")
+    @patch("demix.cli.remove_dir")
+    @patch("demix.cli.check_ffmpeg", return_value=True)
+    @patch("demix.cli.os.path.exists", return_value=True)
+    @patch("demix.cli.os.path.isfile", return_value=True)
+    @patch("demix.cli.os.makedirs")
+    @patch.object(sys, "argv", ["demix", "-f", "/path/to/song.mp3", "-K", "Am"])
+    def test_main_target_key_applies_transpose(
+        self, mock_makedirs, mock_isfile, mock_exists, mock_check, mock_remove,
+        mock_convert_wav, mock_separate, mock_wav_to_mp3, mock_mkv, mock_detect_key, capsys
+    ):
+        """Verify transpose value is applied to stem conversion."""
+        main()
+        # E=4, A=9, so A-E = 5 semitones
+        call_args = mock_wav_to_mp3.call_args_list
+        # Stems should be converted with transpose=5
+        for call in call_args[1:]:
+            assert call[0][3] == 5  # transpose
+
+    @patch("demix.cli.detect_key", return_value=("D", "major", 0.85))
+    @patch("demix.cli.create_empty_mkv_with_audio")
+    @patch("demix.cli.convert_wav_to_mp3")
+    @patch("demix.cli.separate_audio")
+    @patch("demix.cli.convert_to_wav")
+    @patch("demix.cli.remove_dir")
+    @patch("demix.cli.check_ffmpeg", return_value=True)
+    @patch("demix.cli.os.path.exists", return_value=True)
+    @patch("demix.cli.os.path.isfile", return_value=True)
+    @patch("demix.cli.os.makedirs")
+    @patch.object(sys, "argv", ["demix", "-f", "/path/to/song.mp3", "-K", "C", "-t", "0.9"])
+    def test_main_target_key_with_tempo(
+        self, mock_makedirs, mock_isfile, mock_exists, mock_check, mock_remove,
+        mock_convert_wav, mock_separate, mock_wav_to_mp3, mock_mkv, mock_detect_key, capsys
+    ):
+        """Target key should work with tempo option."""
+        main()
+        captured = capsys.readouterr()
+        assert "Transposing from D major to C major" in captured.out
+        # D=2, C=0, so 0-2=-2
+        call_args = mock_wav_to_mp3.call_args_list
+        for call in call_args[1:]:
+            assert call[0][2] == 0.9   # tempo
+            assert call[0][3] == -2    # transpose
+
+    @patch("demix.cli.detect_key", return_value=("F#", "major", 0.85))
+    @patch("demix.cli.create_empty_mkv_with_audio")
+    @patch("demix.cli.convert_wav_to_mp3")
+    @patch("demix.cli.separate_audio")
+    @patch("demix.cli.convert_to_wav")
+    @patch("demix.cli.remove_dir")
+    @patch("demix.cli.check_ffmpeg", return_value=True)
+    @patch("demix.cli.os.path.exists", return_value=True)
+    @patch("demix.cli.os.path.isfile", return_value=True)
+    @patch("demix.cli.os.makedirs")
+    @patch.object(sys, "argv", ["demix", "-f", "/path/to/song.mp3", "-K", "C"])
+    def test_main_target_key_tritone(
+        self, mock_makedirs, mock_isfile, mock_exists, mock_check, mock_remove,
+        mock_convert_wav, mock_separate, mock_wav_to_mp3, mock_mkv, mock_detect_key, capsys
+    ):
+        """F# to C is a tritone (6 semitones)."""
+        main()
+        captured = capsys.readouterr()
+        # F#=6, C=0, so 0-6=-6
+        assert "-6 semitones" in captured.out
