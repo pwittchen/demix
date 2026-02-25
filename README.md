@@ -103,15 +103,16 @@ demix -f <audio-file> [options]
 | `-K`, `--target-key` | Transpose audio to target key (e.g., `C`, `Am`, `F#`, `Bb minor`) |
 | `-ss`, `--start` | Start time for cutting (format: `MM:SS` or `HH:MM:SS`) |
 | `-to`, `--end` | End time for cutting (format: `MM:SS` or `HH:MM:SS`) |
-| `-m`, `--mode` | Separation mode: `2stems`, `4stems`, or `5stems` (default: `2stems`) |
+| `-m`, `--mode` | Processing mode: `nosplit`, `2stems`, `4stems`, or `5stems` (default: `2stems`) |
 | `-c`, `--clean` | Clean up files: `output`, `models`, or `all` |
 | `-v`, `--version` | Show version number |
 | `-h`, `--help` | Show help message |
 
-### separation modes
+### modes
 
-| Mode | Stems |
-|------|-------|
+| Mode | Description |
+|------|-------------|
+| `nosplit` | No stem separation (download, convert, and apply effects only) |
 | `2stems` | vocals, accompaniment |
 | `4stems` | vocals, drums, bass, other |
 | `5stems` | vocals, drums, bass, piano, other |
@@ -154,4 +155,10 @@ demix -f song.mp3 -K Am
 
 # transpose to target key with tempo change
 demix -f song.mp3 -K "F# minor" -t 0.9
+
+# slow down without separating stems
+demix -f song.mp3 -t 0.8 -m nosplit
+
+# download and cut without separation
+demix -u 'https://www.youtube.com/watch?v=VIDEO_ID' -ss 1:00 -to 3:00 -m nosplit
 ```

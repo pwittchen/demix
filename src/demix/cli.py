@@ -343,7 +343,8 @@ def parse_args():
                "  demix -f /path/to/song.mp3 -m 2stems\n"
                "  demix -f song.mp3 -ss 1:30 -to 3:45      # cut from 1:30 to 3:45\n"
                "  demix -f song.mp3 -ss 0:30               # start from 0:30\n"
-               "  demix -f song.mp3 -to 2:00               # cut first 2 minutes",
+               "  demix -f song.mp3 -to 2:00               # cut first 2 minutes\n"
+               "  demix -f song.mp3 -t 0.8 -m nosplit      # slow down without separating stems",
         formatter_class=WideHelpFormatter
     )
     parser.add_argument(
@@ -410,10 +411,11 @@ def parse_args():
     )
     parser.add_argument(
         "-m", "--mode",
-        choices=["2stems", "4stems", "5stems"],
+        choices=["nosplit", "2stems", "4stems", "5stems"],
         default="2stems",
         metavar="MODE",
-        help="separation mode: 2stems (vocals/accompaniment), "
+        help="processing mode: nosplit (no stem separation), "
+             "2stems (vocals/accompaniment), "
              "4stems (vocals/drums/bass/other), "
              "5stems (vocals/drums/bass/piano/other). "
              "Default: 2stems"
@@ -473,7 +475,10 @@ def _print_info(source, output_dir, mode, stems, start_time, end_time, start_str
     """Print processing information."""
     print(f"Processing: {source}")
     print(f"Output directory: {output_dir}")
-    print(f"Separation mode: {mode} ({', '.join(stems)})")
+    if mode == "nosplit":
+        print("Stem separation: disabled")
+    else:
+        print(f"Separation mode: {mode} ({', '.join(stems)})")
     if start_time is not None or end_time is not None:
         cut_info = "Cutting: "
         if start_time is not None:
@@ -508,14 +513,20 @@ def _convert_source(url, local_file, dirs, start_time, end_time):
     return wav_file, mp3_file
 
 
-def _convert_stems(tempo, transpose, dirs, stems):
-    """Convert separated stems to MP3 with optional effects."""
+def _build_effects_list(tempo, transpose):
+    """Build human-readable list of effects being applied."""
     effects = []
     if tempo != 1.0:
         effects.append(f"tempo: {tempo}x")
     if transpose != 0:
         sign = "+" if transpose > 0 else ""
         effects.append(f"transpose: {sign}{transpose} semitones")
+    return effects
+
+
+def _convert_stems(tempo, transpose, dirs, stems):
+    """Convert separated stems to MP3 with optional effects."""
+    effects = _build_effects_list(tempo, transpose)
 
     convert_msg = "Converting separated tracks to MP3..."
     if effects:
@@ -647,6 +658,34 @@ def _resolve_transpose(wav_file, args):
     return args.transpose, True
 
 
+def _process_audio(args, url, dirs, wav_file, transpose):
+    """Run the main audio processing pipeline."""
+    if args.mode == "nosplit":
+        _apply_effects_to_original(wav_file, dirs, args.tempo, transpose,
+                                   _build_effects_list(args.tempo, transpose))
+        if args.key or args.target_key:
+            _detect_key_after_transpose(dirs, transpose)
+        print(f"\n\033[32m✓\033[0m Done! Check the '{args.output}/' directory for results.")
+        return
+
+    stems = STEM_MODES[args.mode]
+    _print_first_run_notice()
+
+    with Spinner(f"Separating audio ({args.mode})..."):
+        separate_audio(wav_file, dirs["wav"], args.mode)
+
+    effects = _convert_stems(args.tempo, transpose, dirs, stems)
+    _apply_effects_to_original(wav_file, dirs, args.tempo, transpose, effects)
+
+    if args.key or args.target_key:
+        _detect_key_after_transpose(dirs, transpose)
+
+    _create_accompaniment_video(dirs, args.mode)
+
+    print(f"\n\033[32m✓\033[0m Done! Check the '{args.output}/' directory for results.")
+    print(f"  Separated stems: {', '.join(stems)}")
+
+
 def main():
     args = parse_args()
 
@@ -680,7 +719,7 @@ def main():
         return
 
     dirs = _setup_directories(args.output)
-    stems = STEM_MODES[args.mode]
+    stems = STEM_MODES.get(args.mode, [])
     source = _build_source_description(searched_url, url, args.search, args.file)
 
     _print_info(source, args.output, args.mode, stems, start_time, end_time, args.start, args.end)
@@ -692,21 +731,7 @@ def main():
     if not success:
         return
 
-    _print_first_run_notice()
-
-    with Spinner(f"Separating audio ({args.mode})..."):
-        separate_audio(wav_file, dirs["wav"], args.mode)
-
-    effects = _convert_stems(args.tempo, transpose, dirs, stems)
-    _apply_effects_to_original(wav_file, dirs, args.tempo, transpose, effects)
-
-    if args.key or args.target_key:
-        _detect_key_after_transpose(dirs, transpose)
-
-    _create_accompaniment_video(dirs, args.mode)
-
-    print(f"\n\033[32m✓\033[0m Done! Check the '{args.output}/' directory for results.")
-    print(f"  Separated stems: {', '.join(stems)}")
+    _process_audio(args, url, dirs, wav_file, transpose)
 
 
 if __name__ == "__main__":

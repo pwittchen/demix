@@ -1068,6 +1068,110 @@ class TestMain:
         assert "Cutting: from 1:00 to 2:30" in captured.out
 
 
+class TestParseArgsNosplitMode:
+    def test_mode_nosplit(self):
+        with patch.object(sys, "argv", ["demix", "-u", "https://test.com", "-m", "nosplit"]):
+            args = parse_args()
+            assert args.mode == "nosplit"
+
+    def test_nosplit_with_file_and_options(self):
+        with patch.object(sys, "argv", ["demix", "-f", "/path/to/song.mp3", "-m", "nosplit", "-t", "0.8"]):
+            args = parse_args()
+            assert args.mode == "nosplit"
+            assert args.tempo == 0.8
+
+
+class TestMainNosplitMode:
+    @patch("demix.cli.create_empty_mkv_with_audio")
+    @patch("demix.cli.convert_wav_to_mp3")
+    @patch("demix.cli.separate_audio")
+    @patch("demix.cli.convert_to_wav")
+    @patch("demix.cli.download_video", return_value="/output/video/video.mp4")
+    @patch("demix.cli.remove_dir")
+    @patch("demix.cli.check_ffmpeg", return_value=True)
+    @patch("demix.cli.os.path.exists", return_value=True)
+    @patch("demix.cli.os.makedirs")
+    @patch.object(sys, "argv", ["demix", "-u", "https://youtube.com/watch?v=test", "-m", "nosplit"])
+    def test_main_nosplit_skips_separation(
+        self, mock_makedirs, mock_exists, mock_check, mock_remove, mock_download,
+        mock_convert_wav, mock_separate, mock_wav_to_mp3, mock_mkv, capsys
+    ):
+        main()
+        mock_download.assert_called_once()
+        mock_convert_wav.assert_called_once()
+        mock_separate.assert_not_called()
+        mock_mkv.assert_not_called()
+        # Only music.wav to music.mp3 conversion (no stem conversions)
+        assert mock_wav_to_mp3.call_count == 1
+        captured = capsys.readouterr()
+        assert "Stem separation: disabled" in captured.out
+        assert "Done!" in captured.out
+
+    @patch("demix.cli.create_empty_mkv_with_audio")
+    @patch("demix.cli.convert_wav_to_mp3")
+    @patch("demix.cli.separate_audio")
+    @patch("demix.cli.convert_to_wav")
+    @patch("demix.cli.remove_dir")
+    @patch("demix.cli.check_ffmpeg", return_value=True)
+    @patch("demix.cli.os.path.exists", return_value=True)
+    @patch("demix.cli.os.path.isfile", return_value=True)
+    @patch("demix.cli.os.makedirs")
+    @patch.object(sys, "argv", ["demix", "-f", "/path/to/song.mp3", "-m", "nosplit", "-t", "0.8"])
+    def test_main_nosplit_with_tempo(
+        self, mock_makedirs, mock_isfile, mock_exists, mock_check, mock_remove,
+        mock_convert_wav, mock_separate, mock_wav_to_mp3, mock_mkv, capsys
+    ):
+        main()
+        mock_separate.assert_not_called()
+        # 1 for music.mp3 + 1 for music_modified.mp3 with effects
+        assert mock_wav_to_mp3.call_count == 2
+        captured = capsys.readouterr()
+        assert "Stem separation: disabled" in captured.out
+
+    @patch("demix.cli.create_empty_mkv_with_audio")
+    @patch("demix.cli.convert_wav_to_mp3")
+    @patch("demix.cli.separate_audio")
+    @patch("demix.cli.convert_to_wav")
+    @patch("demix.cli.remove_dir")
+    @patch("demix.cli.check_ffmpeg", return_value=True)
+    @patch("demix.cli.os.path.exists", return_value=True)
+    @patch("demix.cli.os.path.isfile", return_value=True)
+    @patch("demix.cli.os.makedirs")
+    @patch.object(sys, "argv", ["demix", "-f", "/path/to/song.mp3", "-m", "nosplit", "-ss", "1:00", "-to", "2:00"])
+    def test_main_nosplit_with_cutting(
+        self, mock_makedirs, mock_isfile, mock_exists, mock_check, mock_remove,
+        mock_convert_wav, mock_separate, mock_wav_to_mp3, mock_mkv, capsys
+    ):
+        main()
+        mock_separate.assert_not_called()
+        call_args = mock_convert_wav.call_args[0]
+        assert call_args[2] == 60.0   # start_time
+        assert call_args[3] == 120.0  # end_time
+        captured = capsys.readouterr()
+        assert "Cutting: from 1:00 to 2:00" in captured.out
+
+    @patch("demix.cli.detect_key", return_value=("G", "major", 0.88))
+    @patch("demix.cli.create_empty_mkv_with_audio")
+    @patch("demix.cli.convert_wav_to_mp3")
+    @patch("demix.cli.separate_audio")
+    @patch("demix.cli.convert_to_wav")
+    @patch("demix.cli.remove_dir")
+    @patch("demix.cli.check_ffmpeg", return_value=True)
+    @patch("demix.cli.os.path.exists", return_value=True)
+    @patch("demix.cli.os.path.isfile", return_value=True)
+    @patch("demix.cli.os.makedirs")
+    @patch.object(sys, "argv", ["demix", "-f", "/path/to/song.mp3", "-m", "nosplit", "-k"])
+    def test_main_nosplit_with_key_detection(
+        self, mock_makedirs, mock_isfile, mock_exists, mock_check, mock_remove,
+        mock_convert_wav, mock_separate, mock_wav_to_mp3, mock_mkv, mock_detect_key, capsys
+    ):
+        main()
+        mock_separate.assert_not_called()
+        mock_detect_key.assert_called_once()
+        captured = capsys.readouterr()
+        assert "Detected key: G major" in captured.out
+
+
 class TestParseArgsKey:
     def test_key_default_false(self):
         with patch.object(sys, "argv", ["demix", "-u", "https://test.com"]):
