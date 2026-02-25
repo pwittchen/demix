@@ -412,7 +412,7 @@ def parse_args():
     parser.add_argument(
         "-m", "--mode",
         choices=["nosplit", "2stems", "4stems", "5stems"],
-        default="2stems",
+        default="nosplit",
         metavar="MODE",
         help="processing mode: nosplit (no stem separation), "
              "2stems (vocals/accompaniment), "

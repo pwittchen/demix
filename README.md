@@ -103,7 +103,7 @@ demix -f <audio-file> [options]
 | `-K`, `--target-key` | Transpose audio to target key (e.g., `C`, `Am`, `F#`, `Bb minor`) |
 | `-ss`, `--start` | Start time for cutting (format: `MM:SS` or `HH:MM:SS`) |
 | `-to`, `--end` | End time for cutting (format: `MM:SS` or `HH:MM:SS`) |
-| `-m`, `--mode` | Processing mode: `nosplit`, `2stems`, `4stems`, or `5stems` (default: `2stems`) |
+| `-m`, `--mode` | Processing mode: `nosplit`, `2stems`, `4stems`, or `5stems` (default: `nosplit`) |
 | `--video` | Generate accompaniment video (default: skip video generation) |
 | `-c`, `--clean` | Clean up files: `output`, `models`, or `all` |
 | `-v`, `--version` | Show version number |
