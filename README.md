@@ -122,7 +122,7 @@ demix -f <audio-file> [options]
 
 ```bash
 # separate a YouTube video into vocals and accompaniment
-demix -u 'https://www.youtube.com/watch?v=VIDEO_ID'
+demix -u 'https://www.youtube.com/watch?v=VIDEO_ID' -m 2stems
 
 # search YouTube by artist and song name
 demix -s 'Queen - Bohemian Rhapsody' -m 4stems
@@ -130,7 +130,7 @@ demix -s 'Queen - Bohemian Rhapsody' -m 4stems
 # separate a local file with 4 stems
 demix -f /path/to/song.mp3 -m 4stems
 
-# cut audio from 1:30 to 3:45 before separation
+# cut audio from 1:30 to 3:45
 demix -f song.mp3 -ss 1:30 -to 3:45
 
 # start from 0:30 (skip intro)

@@ -142,7 +142,7 @@ class TestParseArgs:
     def test_default_mode(self):
         with patch.object(sys, "argv", ["demix", "-u", "https://test.com"]):
             args = parse_args()
-            assert args.mode == "2stems"
+            assert args.mode == "nosplit"
 
     def test_mode_4stems(self):
         with patch.object(sys, "argv", ["demix", "-u", "https://test.com", "-m", "4stems"]):
@@ -815,7 +815,7 @@ class TestMain:
     @patch("demix.cli.check_ffmpeg", return_value=True)
     @patch("demix.cli.os.path.exists", return_value=True)  # pretrained_models exists
     @patch("demix.cli.os.makedirs")
-    @patch.object(sys, "argv", ["demix", "-u", "https://youtube.com/watch?v=test"])
+    @patch.object(sys, "argv", ["demix", "-u", "https://youtube.com/watch?v=test", "-m", "2stems"])
     def test_main_url_workflow_2stems(
         self, mock_makedirs, mock_exists, mock_check, mock_remove, mock_download,
         mock_convert_wav, mock_separate, mock_wav_to_mp3, mock_mkv
@@ -826,8 +826,8 @@ class TestMain:
         mock_separate.assert_called_once()
         # 2stems has 2 stems to convert + 1 for music.wav to music.mp3
         assert mock_wav_to_mp3.call_count == 3
-        # 2stems mode should create video
-        mock_mkv.assert_called_once()
+        # video generation is off by default (requires --video flag)
+        mock_mkv.assert_not_called()
 
     @patch("demix.cli.create_empty_mkv_with_audio")
     @patch("demix.cli.convert_wav_to_mp3")
@@ -859,7 +859,7 @@ class TestMain:
     @patch("demix.cli.os.path.exists", return_value=True)
     @patch("demix.cli.os.path.isfile", return_value=True)
     @patch("demix.cli.os.makedirs")
-    @patch.object(sys, "argv", ["demix", "-f", "/path/to/song.mp3"])
+    @patch.object(sys, "argv", ["demix", "-f", "/path/to/song.mp3", "-m", "2stems"])
     def test_main_file_workflow(
         self, mock_makedirs, mock_isfile, mock_exists, mock_check, mock_remove,
         mock_convert_wav, mock_separate, mock_wav_to_mp3, mock_mkv
@@ -877,7 +877,7 @@ class TestMain:
     @patch("demix.cli.remove_dir")
     @patch("demix.cli.check_ffmpeg", return_value=True)
     @patch("demix.cli.os.path.exists", return_value=False)  # pretrained_models does NOT exist
-    @patch.object(sys, "argv", ["demix", "-u", "https://youtube.com/watch?v=test"])
+    @patch.object(sys, "argv", ["demix", "-u", "https://youtube.com/watch?v=test", "-m", "2stems"])
     def test_main_first_run_message(
         self, mock_exists, mock_check, mock_remove, mock_download,
         mock_convert_wav, mock_separate, mock_wav_to_mp3, mock_mkv, capsys
