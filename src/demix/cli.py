@@ -336,7 +336,8 @@ def parse_args():
 
     parser = argparse.ArgumentParser(
         prog="demix",
-        description="Separate audio into stems (vocals, instruments) from a YouTube video or local audio file.",
+        description="Audio processing tool: download from YouTube or use local files, separate stems, "
+                    "adjust tempo/pitch, detect and transpose key, and cut segments.",
         epilog="Examples:\n"
                "  demix -u 'https://www.youtube.com/watch?v=VIDEO_ID' -m 4stems\n"
                "  demix -s 'Queen - Bohemian Rhapsody' -m 4stems\n"
