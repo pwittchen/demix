@@ -421,9 +421,9 @@ def parse_args():
              "Default: 2stems"
     )
     parser.add_argument(
-        "--novideo",
+        "--video",
         action="store_true",
-        help="skip accompaniment video generation"
+        help="generate accompaniment video (default: skip video generation)"
     )
     parser.add_argument(
         "-v", "--version",
@@ -685,7 +685,7 @@ def _process_audio(args, url, dirs, wav_file, transpose):
     if args.key or args.target_key:
         _detect_key_after_transpose(dirs, transpose)
 
-    if not args.novideo:
+    if args.video:
         _create_accompaniment_video(dirs, args.mode)
 
     print(f"\n\033[32m✓\033[0m Done! Check the '{args.output}/' directory for results.")

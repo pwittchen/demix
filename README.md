@@ -104,7 +104,7 @@ demix -f <audio-file> [options]
 | `-ss`, `--start` | Start time for cutting (format: `MM:SS` or `HH:MM:SS`) |
 | `-to`, `--end` | End time for cutting (format: `MM:SS` or `HH:MM:SS`) |
 | `-m`, `--mode` | Processing mode: `nosplit`, `2stems`, `4stems`, or `5stems` (default: `2stems`) |
-| `--novideo` | Skip accompaniment video generation |
+| `--video` | Generate accompaniment video (default: skip video generation) |
 | `-c`, `--clean` | Clean up files: `output`, `models`, or `all` |
 | `-v`, `--version` | Show version number |
 | `-h`, `--help` | Show help message |
