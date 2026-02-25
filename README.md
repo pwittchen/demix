@@ -5,7 +5,7 @@
  [![deploy](https://github.com/pwittchen/demix/actions/workflows/deploy.yml/badge.svg)](https://github.com/pwittchen/demix/actions/workflows/deploy.yml)
  [![release](https://github.com/pwittchen/demix/actions/workflows/release.yml/badge.svg)](https://github.com/pwittchen/demix/actions/workflows/release.yml)
 
-Audio processing tool: download from YouTube or use local files, separate stems, adjust tempo/pitch, detect and transpose key, and cut segments.
+audio processing tool: download from YouTube or use local files, separate stems, adjust tempo/pitch, detect and transpose key, and cut segments.
 
 ## prerequisites
 
