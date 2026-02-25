@@ -231,18 +231,30 @@ def convert_to_wav(input_file, output_file, start_time=None, end_time=None):
     if end_time is not None:
         cmd.extend(["-to", str(end_time)])
     cmd.extend(["-i", input_file, "-vn", "-ar", "44100", "-ac", "2", output_file])
-    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def convert_wav_to_mp3(input_file, output_file, tempo=1.0, transpose=0):
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     cmd = ["ffmpeg", "-i", input_file]
     filters = []
-    # Apply transpose (pitch shift) using rubberband filter
+    # Apply transpose (pitch shift) using asetrate/aresample filters
+    # These are built-in ffmpeg filters (no librubberband dependency)
     # Formula: pitch_ratio = 2^(semitones/12)
+    # asetrate changes pitch but also speed; we compensate with atempo
     if transpose != 0:
         pitch_ratio = 2 ** (transpose / 12)
-        filters.append(f"rubberband=pitch={pitch_ratio}")
+        filters.append(f"asetrate=44100*{pitch_ratio}")
+        filters.append("aresample=44100")
+        # Compensate for speed change introduced by asetrate
+        compensation = 1.0 / pitch_ratio
+        while compensation < 0.5:
+            filters.append("atempo=0.5")
+            compensation /= 0.5
+        while compensation > 2.0:
+            filters.append("atempo=2.0")
+            compensation /= 2.0
+        filters.append(f"atempo={compensation}")
     # Apply tempo adjustment using atempo filter
     if tempo != 1.0:
         # atempo filter only accepts values between 0.5 and 2.0
@@ -258,7 +270,7 @@ def convert_wav_to_mp3(input_file, output_file, tempo=1.0, transpose=0):
     if filters:
         cmd.extend(["-af", ",".join(filters)])
     cmd.extend(["-b:a", "192k", output_file])
-    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def separate_audio(mp3_file, output_folder, mode="2stems"):
@@ -295,7 +307,7 @@ def create_empty_mkv_with_audio(mp3_file, output_file):
         "-i", mp3_file, "-c:v", "libx264", "-c:a", "aac", "-strict", "experimental",
         "-shortest", output_file
     ]
-    subprocess.run(ffmpeg_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def remove_dir(path):

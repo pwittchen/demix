@@ -429,8 +429,10 @@ class TestConvertWavToMp3:
         args = mock_run.call_args[0][0]
         assert "-af" in args
         af_index = args.index("-af")
+        filter_chain = args[af_index + 1]
         # pitch_ratio = 2^(5/12) ≈ 1.3348
-        assert "rubberband=pitch=" in args[af_index + 1]
+        assert "asetrate=44100*" in filter_chain
+        assert "aresample=44100" in filter_chain
 
     @patch("demix.cli.subprocess.run")
     @patch("demix.cli.os.makedirs")
@@ -440,8 +442,10 @@ class TestConvertWavToMp3:
         args = mock_run.call_args[0][0]
         assert "-af" in args
         af_index = args.index("-af")
+        filter_chain = args[af_index + 1]
         # pitch_ratio = 2^(-7/12) ≈ 0.6674
-        assert "rubberband=pitch=" in args[af_index + 1]
+        assert "asetrate=44100*" in filter_chain
+        assert "aresample=44100" in filter_chain
 
     @patch("demix.cli.subprocess.run")
     @patch("demix.cli.os.makedirs")
@@ -451,8 +455,10 @@ class TestConvertWavToMp3:
         args = mock_run.call_args[0][0]
         assert "-af" in args
         af_index = args.index("-af")
+        filter_chain = args[af_index + 1]
         # pitch_ratio = 2^(12/12) = 2.0 (one octave up)
-        assert "rubberband=pitch=2.0" in args[af_index + 1]
+        assert "asetrate=44100*2.0" in filter_chain
+        assert "aresample=44100" in filter_chain
 
     @patch("demix.cli.subprocess.run")
     @patch("demix.cli.os.makedirs")
@@ -462,8 +468,10 @@ class TestConvertWavToMp3:
         args = mock_run.call_args[0][0]
         assert "-af" in args
         af_index = args.index("-af")
+        filter_chain = args[af_index + 1]
         # pitch_ratio = 2^(-12/12) = 0.5 (one octave down)
-        assert "rubberband=pitch=0.5" in args[af_index + 1]
+        assert "asetrate=44100*0.5" in filter_chain
+        assert "aresample=44100" in filter_chain
 
     @patch("demix.cli.subprocess.run")
     @patch("demix.cli.os.makedirs")
@@ -474,11 +482,12 @@ class TestConvertWavToMp3:
         assert "-af" in args
         af_index = args.index("-af")
         filter_chain = args[af_index + 1]
-        # Should have both rubberband and atempo in the filter chain
-        assert "rubberband=pitch=" in filter_chain
+        # Should have asetrate, aresample, and atempo in the filter chain
+        assert "asetrate=44100*" in filter_chain
+        assert "aresample=44100" in filter_chain
         assert "atempo=" in filter_chain
-        # rubberband should come before atempo
-        assert filter_chain.index("rubberband") < filter_chain.index("atempo")
+        # asetrate should come before atempo
+        assert filter_chain.index("asetrate") < filter_chain.index("atempo")
 
 
 class TestConvertToWav:
