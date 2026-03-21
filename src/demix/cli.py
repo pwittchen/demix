@@ -1,6 +1,8 @@
 """Command-line interface for demix."""
 
 import argparse
+import glob as globmod
+import json
 import subprocess
 import os
 import shutil
@@ -8,7 +10,6 @@ import sys
 import threading
 import itertools
 import time
-from pytubefix import YouTube, Search
 import essentia.standard as es
 
 
@@ -203,9 +204,27 @@ def clean_url(url):
     return url
 
 
+def _check_yt_dlp():
+    """Check if yt-dlp is installed."""
+    return shutil.which("yt-dlp") is not None
+
+
 def search_youtube(query):
     """Search YouTube and return the URL of the first video result."""
-    results = Search(query)
+    if _check_yt_dlp():
+        result = subprocess.run(
+            ["yt-dlp", f"ytsearch1:{query}", "--dump-json", "--no-download"],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            info = json.loads(result.stdout)
+            video_id = info.get("id", "")
+            title = info.get("title")
+            url = f"https://www.youtube.com/watch?v={video_id}"
+            return url, title
+    # Fallback to pytubefix
+    from pytubefix import Search
+    results = Search(query, client="WEB")
     videos = list(results.videos)
     if not videos:
         return None, None
@@ -215,12 +234,40 @@ def search_youtube(query):
 
 def download_video(url, output_path):
     os.makedirs(output_path, exist_ok=True)
-    yt = YouTube(url)
-    stream = yt.streams.filter(only_audio=True).order_by("abr").desc().first()
-    ext = stream.mime_type.split("/")[-1]
-    filename = f"video.{ext}"
-    stream.download(output_path=output_path, filename=filename)
-    return os.path.join(output_path, filename)
+    if _check_yt_dlp():
+        output_template = os.path.join(output_path, "video.%(ext)s")
+        result = subprocess.run(
+            ["yt-dlp", "-f", "bestaudio/best", "-x", "-o", output_template, url],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            # Find the downloaded file
+            files = globmod.glob(os.path.join(output_path, "video.*"))
+            if files:
+                return files[0]
+    # Fallback to pytubefix
+    from pytubefix import YouTube
+    from pytubefix.exceptions import BotDetection, RegexMatchError
+    clients = ["WEB", "ANDROID_VR", "ANDROID", "IOS"]
+    last_error = None
+    for client in clients:
+        try:
+            yt = YouTube(url, client=client)
+            stream = yt.streams.filter(only_audio=True).order_by("abr").desc().first()
+            if stream is None:
+                continue
+            ext = stream.mime_type.split("/")[-1]
+            filename = f"video.{ext}"
+            stream.download(output_path=output_path, filename=filename)
+            return os.path.join(output_path, filename)
+        except (BotDetection, RegexMatchError, Exception) as e:
+            last_error = e
+            continue
+    raise RuntimeError(
+        "Failed to download from YouTube. "
+        f"Last error: {last_error}. "
+        "Install yt-dlp (brew install yt-dlp) or use --file with a local audio file."
+    )
 
 
 def convert_to_wav(input_file, output_file, start_time=None, end_time=None):

@@ -579,59 +579,63 @@ class TestSeparateAudio:
 
 
 class TestDownloadVideo:
-    @patch("demix.cli.YouTube")
+    @patch("demix.cli.globmod.glob", return_value=["/output/video.webm"])
+    @patch("demix.cli.subprocess.run")
+    @patch("demix.cli._check_yt_dlp", return_value=True)
     @patch("demix.cli.os.makedirs")
-    def test_download_video(self, mock_makedirs, mock_youtube):
-        mock_stream = MagicMock()
-        mock_stream.mime_type = "audio/mp4"
-        mock_stream.download.return_value = None
-        mock_yt = MagicMock()
-        mock_yt.streams.filter.return_value.order_by.return_value.desc.return_value.first.return_value = mock_stream
-        mock_youtube.return_value = mock_yt
+    def test_download_video_yt_dlp(self, mock_makedirs, mock_check, mock_run, mock_glob):
+        mock_run.return_value = MagicMock(returncode=0)
 
         result = download_video("https://youtube.com/watch?v=test", "/output")
 
         mock_makedirs.assert_called_once_with("/output", exist_ok=True)
-        mock_youtube.assert_called_once_with("https://youtube.com/watch?v=test")
-        assert result == "/output/video.mp4"
+        mock_run.assert_called_once()
+        args = mock_run.call_args[0][0]
+        assert args[0] == "yt-dlp"
+        assert "https://youtube.com/watch?v=test" in args
+        assert result == "/output/video.webm"
 
 
 class TestSearchYoutube:
-    @patch("demix.cli.Search")
-    def test_search_youtube_returns_first_result(self, mock_search):
-        mock_video = MagicMock()
-        mock_video.watch_url = "https://youtube.com/watch?v=abc123"
-        mock_video.title = "Test Song - Test Artist"
-        mock_search.return_value.videos = [mock_video]
+    @patch("demix.cli.subprocess.run")
+    @patch("demix.cli._check_yt_dlp", return_value=True)
+    def test_search_youtube_returns_first_result(self, mock_check, mock_run):
+        import json
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"id": "abc123", "title": "Test Song - Test Artist"})
+        )
 
         url, title = search_youtube("Test Artist - Test Song")
 
-        mock_search.assert_called_once_with("Test Artist - Test Song")
-        assert url == "https://youtube.com/watch?v=abc123"
+        assert url == "https://www.youtube.com/watch?v=abc123"
         assert title == "Test Song - Test Artist"
 
-    @patch("demix.cli.Search")
-    def test_search_youtube_no_results(self, mock_search):
-        mock_search.return_value.videos = []
+    @patch("demix.cli.subprocess.run")
+    @patch("demix.cli._check_yt_dlp", return_value=True)
+    def test_search_youtube_no_results(self, mock_check, mock_run):
+        mock_run.return_value = MagicMock(returncode=1, stdout="")
 
-        url, title = search_youtube("nonexistent song xyz")
+        # Falls back to pytubefix when yt-dlp fails
+        with patch("pytubefix.Search") as mock_search:
+            mock_search.return_value.videos = []
+            url, title = search_youtube("nonexistent song xyz")
 
         assert url is None
         assert title is None
 
-    @patch("demix.cli.Search")
-    def test_search_youtube_multiple_results_returns_first(self, mock_search):
-        mock_video1 = MagicMock()
-        mock_video1.watch_url = "https://youtube.com/watch?v=first"
-        mock_video1.title = "First Result"
-        mock_video2 = MagicMock()
-        mock_video2.watch_url = "https://youtube.com/watch?v=second"
-        mock_video2.title = "Second Result"
-        mock_search.return_value.videos = [mock_video1, mock_video2]
+    @patch("demix.cli.subprocess.run")
+    @patch("demix.cli._check_yt_dlp", return_value=True)
+    def test_search_youtube_multiple_results_returns_first(self, mock_check, mock_run):
+        import json
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"id": "first", "title": "First Result"})
+        )
 
         url, title = search_youtube("test query")
 
-        assert url == "https://youtube.com/watch?v=first"
+        assert url == "https://www.youtube.com/watch?v=first"
         assert title == "First Result"
 
 
