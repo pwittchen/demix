@@ -163,3 +163,17 @@ demix -f song.mp3 -t 0.8 -m nosplit
 # download and cut without separation
 demix -u 'https://www.youtube.com/watch?v=VIDEO_ID' -ss 1:00 -to 3:00 -m nosplit
 ```
+
+## Claude Code skill
+
+This repo ships a [Claude Code](https://claude.com/claude-code) skill at [`.claude/skills/demix/SKILL.md`](.claude/skills/demix/SKILL.md) that translates plain-English requests into `demix` invocations — describe what you want and Claude picks the flags, shows the command, and runs it.
+
+Examples of requests the skill handles:
+
+- *"Download `https://youtu.be/abc123` and give me the instrumental"* → `demix -u 'https://youtu.be/abc123' -m 2stems`
+- *"Find 'Radiohead Creep', slow it 15%, keep only the first two minutes"* → `demix -s 'Radiohead Creep' -t 0.85 -to 2:00`
+- *"`~/Music/song.mp3` — transpose to G minor and split into 4 stems"* → `demix -f '~/Music/song.mp3' -m 4stems -K 'Gm'`
+- *"What key is `song.wav` in?"* → `demix -f 'song.wav' -k`
+- *"Make a karaoke video from 'Adele - Hello'"* → `demix -s 'Adele - Hello' -m 2stems --video`
+
+Trigger it by typing `/demix` in Claude Code, or just describe the task in natural language — the skill loads automatically when the intent matches.
