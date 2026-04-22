@@ -6,7 +6,7 @@ Spleeter. Supports YouTube downloads or local audio files, with options
 for tempo/pitch adjustments and audio cutting.
 """
 
-__version__ = "1.5.2"
+__version__ = "1.5.3"
 __author__ = "Piotr Wittchen"
 
 from demix.cli import (
