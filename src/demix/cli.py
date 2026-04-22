@@ -471,7 +471,8 @@ def parse_args():
     parser.add_argument(
         "--video",
         action="store_true",
-        help="generate accompaniment video (default: skip video generation)"
+        help="generate video: accompaniment track in 2stems mode, "
+             "or the output music track in nosplit mode (default: skip video generation)"
     )
     parser.add_argument(
         "-v", "--version",
@@ -625,6 +626,17 @@ def _create_accompaniment_video(dirs, mode):
         )
 
 
+def _create_music_video(dirs):
+    """Create video for the output music track (modified if effects applied, else original)."""
+    modified_mp3 = os.path.join(dirs["music"], "music_modified.mp3")
+    source_mp3 = modified_mp3 if os.path.exists(modified_mp3) else os.path.join(dirs["mp3"], "music.mp3")
+    with Spinner("Creating video for music track..."):
+        create_empty_mkv_with_audio(
+            source_mp3,
+            os.path.join(dirs["video"], "music.mkv"),
+        )
+
+
 def _print_first_run_notice():
     """Print notice about model download on first run."""
     if not os.path.exists("pretrained_models"):
@@ -718,6 +730,8 @@ def _process_audio(args, url, dirs, wav_file, transpose):
                                    _build_effects_list(args.tempo, transpose))
         if args.key or args.target_key:
             _detect_key_after_transpose(dirs, transpose)
+        if args.video:
+            _create_music_video(dirs)
         print(f"\n\033[32m✓\033[0m Done! Check the '{args.output}/' directory for results.")
         return
 
