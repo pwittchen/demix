@@ -105,6 +105,7 @@ demix -f <audio-file> [options]
 | `-to`, `--end` | End time for cutting (format: `MM:SS` or `HH:MM:SS`) |
 | `-m`, `--mode` | Processing mode: `nosplit`, `2stems`, `4stems`, or `5stems` (default: `nosplit`) |
 | `--video` | Generate video: accompaniment track in `2stems` mode, or the output music track in `nosplit` mode (default: skip video generation) |
+| `-q`, `--quiet` | Suppress progress messages and spinners; print only the final result and errors |
 | `-c`, `--clean` | Clean up files: `output`, `models`, or `all` |
 | `-v`, `--version` | Show version number |
 | `-h`, `--help` | Show help message |
@@ -162,6 +163,9 @@ demix -f song.mp3 -t 0.8 -m nosplit
 
 # download and cut without separation
 demix -u 'https://www.youtube.com/watch?v=VIDEO_ID' -ss 1:00 -to 3:00 -m nosplit
+
+# run silently and only print the final result message
+demix -f song.mp3 -m 4stems -q
 ```
 
 ## Claude Code skill

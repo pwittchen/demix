@@ -44,6 +44,13 @@ NOTE_TO_SEMITONE = {
 # Valid key names for CLI help text
 VALID_KEYS = ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"]
 
+_QUIET = False
+
+
+def _log(*args, **kwargs):
+    if not _QUIET:
+        print(*args, **kwargs)
+
 
 def parse_time(time_str):
     """Parse time string in MM:SS or HH:MM:SS format to seconds."""
@@ -161,11 +168,15 @@ class Spinner:
             time.sleep(0.1)
 
     def start(self):
+        if _QUIET:
+            return
         self.spinning = True
         self.thread = threading.Thread(target=self._spin)
         self.thread.start()
 
     def stop(self, success=True):
+        if _QUIET:
+            return
         self.spinning = False
         if self.thread:
             self.thread.join()
@@ -360,9 +371,9 @@ def create_empty_mkv_with_audio(mp3_file, output_file):
 def remove_dir(path):
     if os.path.exists(path):
         shutil.rmtree(path)
-        print(f"Removed: {path}")
+        _log(f"Removed: {path}")
     else:
-        print(f"Directory does not exist: {path}")
+        _log(f"Directory does not exist: {path}")
 
 
 def clean(target, output_dir="output"):
@@ -475,6 +486,11 @@ def parse_args():
              "or the output music track in nosplit mode (default: skip video generation)"
     )
     parser.add_argument(
+        "-q", "--quiet",
+        action="store_true",
+        help="suppress progress messages and spinners; print only the final result and errors"
+    )
+    parser.add_argument(
         "-v", "--version",
         action="version",
         version=f"%(prog)s {get_version()}"
@@ -521,26 +537,26 @@ def _resolve_search(search_query):
     if not url:
         print(f"Error: No results found for '{search_query}'")
         return None, False
-    print(f"Found: {title}")
+    _log(f"Found: {title}")
     return url, True
 
 
 def _print_info(source, output_dir, mode, stems, start_time, end_time, start_str, end_str):
     """Print processing information."""
-    print(f"Processing: {source}")
-    print(f"Output directory: {output_dir}")
+    _log(f"Processing: {source}")
+    _log(f"Output directory: {output_dir}")
     if mode == "nosplit":
-        print("Stem separation: disabled")
+        _log("Stem separation: disabled")
     else:
-        print(f"Separation mode: {mode} ({', '.join(stems)})")
+        _log(f"Separation mode: {mode} ({', '.join(stems)})")
     if start_time is not None or end_time is not None:
         cut_info = "Cutting: "
         if start_time is not None:
             cut_info += f"from {start_str}"
         if end_time is not None:
             cut_info += f" to {end_str}" if start_time else f"to {end_str}"
-        print(cut_info)
-    print()
+        _log(cut_info)
+    _log()
 
 
 def _convert_source(url, local_file, dirs, start_time, end_time):
@@ -640,9 +656,9 @@ def _create_music_video(dirs):
 def _print_first_run_notice():
     """Print notice about model download on first run."""
     if not os.path.exists("pretrained_models"):
-        print("\033[33mℹ\033[0m First run detected - Spleeter models will be downloaded (~300MB).")
-        print("  This is a one-time operation (unless you delete models with --clean models).")
-        print("  Subsequent operations will be faster.\n")
+        _log("\033[33mℹ\033[0m First run detected - Spleeter models will be downloaded (~300MB).")
+        _log("  This is a one-time operation (unless you delete models with --clean models).")
+        _log("  Subsequent operations will be faster.\n")
 
 
 def _detect_key_after_transpose(dirs, transpose):
@@ -663,7 +679,7 @@ def _detect_and_display_key(audio_file, label=None):
         key, scale, strength = detect_key(audio_file)
     confidence_pct = int(strength * 100)
     label_suffix = f" ({label})" if label else ""
-    print(f"\033[34m♪\033[0m Detected key{label_suffix}: {key} {scale} (confidence: {confidence_pct}%)\n")
+    _log(f"\033[34m♪\033[0m Detected key{label_suffix}: {key} {scale} (confidence: {confidence_pct}%)\n")
     return key, scale, strength
 
 
@@ -700,11 +716,11 @@ def _handle_target_key(wav_file, target_key_str):
             wav_file, target_key_str
         )
         if skip:
-            print(f"\033[33m!\033[0m Audio is already in {target_info}. Skipping transposition.\n")
+            _log(f"\033[33m!\033[0m Audio is already in {target_info}. Skipping transposition.\n")
             return 0
         sign = "+" if semitones > 0 else ""
-        print(f"\033[34m♪\033[0m Transposing from {current_info} to {target_info} "
-              f"({sign}{semitones} semitones)\n")
+        _log(f"\033[34m♪\033[0m Transposing from {current_info} to {target_info} "
+             f"({sign}{semitones} semitones)\n")
         return semitones
     except ValueError as e:
         print(f"Error: {e}")
@@ -756,6 +772,9 @@ def _process_audio(args, url, dirs, wav_file, transpose):
 
 def main():
     args = parse_args()
+
+    global _QUIET
+    _QUIET = args.quiet
 
     if args.clean:
         clean(args.clean, args.output)
