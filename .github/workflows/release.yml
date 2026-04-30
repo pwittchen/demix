@@ -1,71 +1,104 @@
-name: release  # creates a new GitHub release with a changelog
+name: release  # bumps version, publishes to PyPI, and creates a GitHub release with a changelog
 
 on:
-  workflow_run:
-    workflows: ["deploy"]
-    types:
-      - completed
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
 
 jobs:
   release:
-    name: Create Release
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
-      # Checkout the full history so git tag sorting works
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Detect newest and previous tags
-      - name: Detect tags
-        id: tags
-        run: |
-          # Get the latest tag starting with 'v'
-          CURRENT_TAG=$(git tag --sort=-version:refname | grep '^v' | head -n 1)
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.8'
 
-          if [ -z "$CURRENT_TAG" ]; then
-            echo "No tags found. Exiting."
-            exit 1
-          fi
+    - name: Extract version from tag
+      id: version
+      run: |
+        TAG=${GITHUB_REF#refs/tags/v}
+        echo "version=$TAG" >> $GITHUB_OUTPUT
+        echo "Extracted version: $TAG"
 
-          # Get the tag just before CURRENT_TAG
-          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep '^v' | grep -A1 "^$CURRENT_TAG$" | tail -1)
+    - name: Bump version
+      run: python bump_version.py ${{ steps.version.outputs.version }}
 
-          # If no previous tag, use initial commit
-          if [ -z "$PREVIOUS_TAG" ] || [ "$PREVIOUS_TAG" = "$CURRENT_TAG" ]; then
-            PREVIOUS_TAG=$(git rev-list --max-parents=0 HEAD)
-          fi
+    - name: Commit and push version bump
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add pyproject.toml src/demix/__init__.py
+        git commit -m "Bump version to ${{ steps.version.outputs.version }}" || echo "No changes to commit"
+        git push origin HEAD:master
 
-          echo "current_tag=$CURRENT_TAG" >> $GITHUB_OUTPUT
-          echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
+    - name: Install build dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine
 
-      # Generate changelog between PREVIOUS_TAG and CURRENT_TAG
-      - name: Generate release notes
-        run: |
-          CURRENT_TAG=${{ steps.tags.outputs.current_tag }}
-          PREVIOUS_TAG=${{ steps.tags.outputs.previous_tag }}
+    - name: Build package
+      run: python -m build
 
-          echo "Generating release notes from $PREVIOUS_TAG to $CURRENT_TAG"
+    - name: Publish to PyPI
+      env:
+        TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+        TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+      run: twine upload dist/*
 
-          COMMITS=$(git log $PREVIOUS_TAG..$CURRENT_TAG --pretty=format:"- %s (%h)" --no-merges)
+    # Detect newest and previous tags
+    - name: Detect tags
+      id: tags
+      run: |
+        # Get the latest tag starting with 'v'
+        CURRENT_TAG=$(git tag --sort=-version:refname | grep '^v' | head -n 1)
 
-          echo "$COMMITS" > release_notes.md
-          cat release_notes.md
+        if [ -z "$CURRENT_TAG" ]; then
+          echo "No tags found. Exiting."
+          exit 1
+        fi
 
-      # Create a GitHub Release
-      - name: Create Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.tags.outputs.current_tag }}
-          release_name: ${{ steps.tags.outputs.current_tag }}
-          body_path: release_notes.md
-          draft: false
-          prerelease: false
+        # Get the tag just before CURRENT_TAG
+        PREVIOUS_TAG=$(git tag --sort=-version:refname | grep '^v' | grep -A1 "^$CURRENT_TAG$" | tail -1)
+
+        # If no previous tag, use initial commit
+        if [ -z "$PREVIOUS_TAG" ] || [ "$PREVIOUS_TAG" = "$CURRENT_TAG" ]; then
+          PREVIOUS_TAG=$(git rev-list --max-parents=0 HEAD)
+        fi
+
+        echo "current_tag=$CURRENT_TAG" >> $GITHUB_OUTPUT
+        echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
+
+    # Generate changelog between PREVIOUS_TAG and CURRENT_TAG
+    - name: Generate release notes
+      run: |
+        CURRENT_TAG=${{ steps.tags.outputs.current_tag }}
+        PREVIOUS_TAG=${{ steps.tags.outputs.previous_tag }}
+
+        echo "Generating release notes from $PREVIOUS_TAG to $CURRENT_TAG"
+
+        COMMITS=$(git log $PREVIOUS_TAG..$CURRENT_TAG --pretty=format:"- %s (%h)" --no-merges)
+
+        echo "$COMMITS" > release_notes.md
+        cat release_notes.md
+
+    # Create a GitHub Release
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.tags.outputs.current_tag }}
+        release_name: ${{ steps.tags.outputs.current_tag }}
+        body_path: release_notes.md
+        draft: false
+        prerelease: false

@@ -2,7 +2,6 @@
 
  [![version](https://img.shields.io/pypi/v/demix.svg)](https://pypi.python.org/pypi/demix/)
  [![build](https://github.com/pwittchen/demix/actions/workflows/build.yml/badge.svg)](https://github.com/pwittchen/demix/actions/workflows/build.yml)
- [![deploy](https://github.com/pwittchen/demix/actions/workflows/deploy.yml/badge.svg)](https://github.com/pwittchen/demix/actions/workflows/deploy.yml)
  [![release](https://github.com/pwittchen/demix/actions/workflows/release.yml/badge.svg)](https://github.com/pwittchen/demix/actions/workflows/release.yml)
 
 audio processing tool: download from YouTube or use local files, separate stems, adjust tempo/pitch, detect and transpose key, and cut segments.
