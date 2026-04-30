@@ -77,15 +77,32 @@ First `2stems`/`4stems`/`5stems` run on a machine downloads ~300 MB of Spleeter 
 
 ## Running the command
 
-Use Bash with the command printed verbatim in the message first. Typical shape:
+`demix` and its dependencies (spleeter, essentia, pytubefix, ffmpeg bindings) live in a Python 3.8 virtualenv named `demix`. The tool will not work outside it. The Bash tool does not preserve shell state between calls, so **every invocation must activate the virtualenv inline**.
+
+Resolve the binary in this order, picking the first that works:
+
+1. **Already inside the right venv** — if `$VIRTUAL_ENV` ends in `/demix`, just run `demix …` directly.
+2. **virtualenvwrapper layout** — if `~/.virtualenvs/demix/bin/activate` exists, prefix with `source ~/.virtualenvs/demix/bin/activate && demix …`.
+3. **In-repo venv** — if `./venv/bin/activate` or `./.venv/bin/activate` exists in the repo root, source that one instead.
+4. **Last resort** — fall back to `python demix.py …` from the repo root, but only if a venv is already active; if none is active, stop and tell the user the `demix` virtualenv isn't set up (point them at the README's `mkvirtualenv` step).
+
+Quick probe before the first run in a session (one Bash call):
 
 ```
-demix -s 'Queen - Bohemian Rhapsody' -m 2stems -t 0.9 -K 'Am' --video
+[ -n "$VIRTUAL_ENV" ] && echo "active: $VIRTUAL_ENV"; ls ~/.virtualenvs/demix/bin/activate 2>/dev/null; ls ./venv/bin/activate ./.venv/bin/activate 2>/dev/null
 ```
 
-Run from the repo root. If `demix` isn't on PATH in this environment, fall back to `python demix.py …` with the same flags.
+Then print the full command you're about to execute (including the `source … &&` prefix when used) and run it via Bash from the repo root. Typical shape:
+
+```
+source ~/.virtualenvs/demix/bin/activate && demix -s 'Queen - Bohemian Rhapsody' -m 2stems -t 0.9 -K 'Am' --video
+```
+
+If activation succeeds but `demix` exits with `ModuleNotFoundError` or `command not found`, the venv exists but isn't provisioned — surface the error and suggest `pip install -r requirements.txt` rather than retrying.
 
 ## Examples (natural language → command)
+
+Examples below show the bare flag combination. In practice, prefix with the venv activation chosen by the resolution rules above (e.g., `source ~/.virtualenvs/demix/bin/activate && …`).
 
 - "Download this and give me the instrumental: https://youtu.be/abc123"
   → `demix -u 'https://youtu.be/abc123' -m 2stems`
