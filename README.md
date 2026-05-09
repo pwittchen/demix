@@ -167,6 +167,49 @@ demix -u 'https://www.youtube.com/watch?v=VIDEO_ID' -ss 1:00 -to 3:00 -m nosplit
 demix -f song.mp3 -m 4stems -q
 ```
 
+## MCP server
+
+The repo also ships an [MCP](https://modelcontextprotocol.io) server at [`mcp/`](mcp/) so LLM clients (Claude Desktop, Claude Code, etc.) can call demix directly. It's a sibling Python package (`demix-mcp`, Python 3.10+) that shells out to the `demix` CLI on PATH — keeping it decoupled from demix's own Python 3.8 environment.
+
+Install (in a separate Python 3.10+ env):
+
+```bash
+pipx install ./mcp
+```
+
+### Claude Code
+
+Register the server with the `claude mcp` CLI (run from your demix workspace so `pretrained_models/` and `output/` cache there):
+
+```bash
+claude mcp add-json demix '{"command":"demix-mcp","cwd":"'"$PWD"'"}'
+```
+
+Add `--scope user` to make it available across all projects, or `--scope project` to commit it into `.mcp.json` for your team. Verify with:
+
+```bash
+claude mcp list
+```
+
+Inside Claude Code, run `/mcp` to inspect server status and the exposed tools.
+
+### Claude Desktop / other clients
+
+Add the server to `~/Library/Application Support/Claude/claude_desktop_config.json` (or your client's equivalent):
+
+```json
+{
+  "mcpServers": {
+    "demix": {
+      "command": "demix-mcp",
+      "cwd": "/path/to/demix-workspace"
+    }
+  }
+}
+```
+
+Tools exposed: `process_audio`, `detect_key`, `search_youtube`, `clean`. See [`mcp/README.md`](mcp/README.md) for details.
+
 ## Claude Code skill
 
 This repo ships a [Claude Code](https://claude.com/claude-code) skill at [`.claude/skills/demix/SKILL.md`](.claude/skills/demix/SKILL.md) that translates plain-English requests into `demix` invocations — describe what you want and Claude picks the flags, shows the command, and runs it.
