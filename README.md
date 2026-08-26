@@ -19,6 +19,7 @@ I suggest to create virtualenv for this project to not break existing system-wid
 ```
 brew install virtualenvwrapper
 brew install ffmpeg
+brew install yt-dlp
 mkdir demix
 cd demix
 mkvirtualenv -p /Users/pw/.pyenv/versions/3.8.16/bin/python demix
@@ -166,6 +167,32 @@ demix -u 'https://www.youtube.com/watch?v=VIDEO_ID' -ss 1:00 -to 3:00 -m nosplit
 # run silently and only print the final result message
 demix -f song.mp3 -m 4stems -q
 ```
+
+## youtube downloads
+
+When given `-u` or `-s`, demix downloads audio with [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) if it's on PATH (`brew install yt-dlp`), falling back to `pytubefix` otherwise.
+
+YouTube periodically restricts which player clients may fetch media without a PO token, and a blocked client typically fails with `HTTP Error 403: Forbidden` partway through the download. To survive that, demix retries the download across several yt-dlp player clients before giving up:
+
+| Order | Strategy |
+|-------|----------|
+| 1 | yt-dlp defaults |
+| 2 | `player_client=tv_simply` |
+| 3 | `player_client=web_embedded` |
+| 4 | `player_client=mweb` |
+| 5 | `pytubefix` (`WEB`, `ANDROID_VR`, `ANDROID`, `IOS`) |
+
+If every strategy fails, demix reports what each attempt returned instead of a single opaque error.
+
+### passing extra yt-dlp options
+
+Set `DEMIX_YT_DLP_ARGS` to append arbitrary arguments to every yt-dlp invocation. This is the usual remedy when downloads are blocked and you're logged into YouTube in a browser:
+
+```bash
+DEMIX_YT_DLP_ARGS='--cookies-from-browser chrome' demix -u 'https://www.youtube.com/watch?v=VIDEO_ID' -m 2stems
+```
+
+Other useful values: `--proxy http://…`, `--limit-rate 1M`, `--sleep-requests 2`. If downloads still fail, `brew upgrade yt-dlp` often restores access, since new releases track YouTube's changes closely.
 
 ## MCP server
 

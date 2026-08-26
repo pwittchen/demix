@@ -11,6 +11,7 @@ from demix import (  # noqa: E402
     __version__,
     DEFAULT_VIDEO_RESOLUTION,
     STEM_MODES,
+    YT_DLP_STRATEGIES,
     NOTE_TO_SEMITONE,
     VALID_KEYS,
     Spinner,
@@ -26,6 +27,8 @@ from demix import (  # noqa: E402
     separate_audio,
     detect_key,
     download_video,
+    _downloaded_files,
+    _clear_downloads,
     create_empty_mkv_with_audio,
     check_ffmpeg,
     search_youtube,
@@ -594,6 +597,100 @@ class TestDownloadVideo:
         assert args[0] == "yt-dlp"
         assert "https://youtube.com/watch?v=test" in args
         assert result == "/output/video.webm"
+
+    @patch("demix.cli._downloaded_files")
+    @patch("demix.cli._clear_downloads")
+    @patch("demix.cli.subprocess.run")
+    @patch("demix.cli._check_yt_dlp", return_value=True)
+    @patch("demix.cli.os.makedirs")
+    def test_download_video_falls_back_to_next_strategy(
+        self, mock_makedirs, mock_check, mock_run, mock_clear, mock_files
+    ):
+        mock_run.side_effect = [
+            MagicMock(returncode=1, stderr="ERROR: unable to download video data: HTTP Error 403: Forbidden"),
+            MagicMock(returncode=0, stderr=""),
+        ]
+        mock_files.side_effect = [[], ["/output/video.m4a"]]
+
+        result = download_video("https://youtube.com/watch?v=test", "/output")
+
+        assert result == "/output/video.m4a"
+        assert mock_run.call_count == 2
+        assert "youtube:player_client=tv_simply" in mock_run.call_args_list[1][0][0]
+
+    @patch("demix.cli._downloaded_files", return_value=[])
+    @patch("demix.cli._clear_downloads")
+    @patch("demix.cli.subprocess.run")
+    @patch("demix.cli._check_yt_dlp", return_value=True)
+    @patch("demix.cli.os.makedirs")
+    def test_download_video_tries_every_strategy_before_giving_up(
+        self, mock_makedirs, mock_check, mock_run, mock_clear, mock_files
+    ):
+        mock_run.return_value = MagicMock(returncode=1, stderr="ERROR: HTTP Error 403: Forbidden")
+
+        with patch("demix.cli._download_with_pytubefix", return_value=(None, ["pytubefix [WEB]: boom"])):
+            with pytest.raises(RuntimeError) as excinfo:
+                download_video("https://youtube.com/watch?v=test", "/output")
+
+        assert mock_run.call_count == len(YT_DLP_STRATEGIES)
+        message = str(excinfo.value)
+        for label, _ in YT_DLP_STRATEGIES:
+            assert f"yt-dlp [{label}]" in message
+        assert "HTTP Error 403: Forbidden" in message
+        assert "pytubefix [WEB]: boom" in message
+        assert "--cookies-from-browser" in message
+
+    @patch("demix.cli._downloaded_files")
+    @patch("demix.cli._clear_downloads")
+    @patch("demix.cli.subprocess.run")
+    @patch("demix.cli._check_yt_dlp", return_value=True)
+    @patch("demix.cli.os.makedirs")
+    def test_download_video_rejects_zero_exit_without_file(
+        self, mock_makedirs, mock_check, mock_run, mock_clear, mock_files
+    ):
+        # yt-dlp exiting 0 without producing a file must not be treated as success
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
+        mock_files.side_effect = [[], ["/output/video.opus"]]
+
+        result = download_video("https://youtube.com/watch?v=test", "/output")
+
+        assert result == "/output/video.opus"
+        assert mock_run.call_count == 2
+
+    @patch("demix.cli._downloaded_files", return_value=["/output/video.m4a"])
+    @patch("demix.cli._clear_downloads")
+    @patch("demix.cli.subprocess.run")
+    @patch("demix.cli._check_yt_dlp", return_value=True)
+    @patch("demix.cli.os.makedirs")
+    def test_download_video_passes_env_args_to_yt_dlp(
+        self, mock_makedirs, mock_check, mock_run, mock_clear, mock_files
+    ):
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
+
+        with patch.dict(os.environ, {"DEMIX_YT_DLP_ARGS": "--cookies-from-browser chrome"}):
+            download_video("https://youtube.com/watch?v=test", "/output")
+
+        args = mock_run.call_args[0][0]
+        assert "--cookies-from-browser" in args
+        assert "chrome" in args
+
+    def test_downloaded_files_ignores_partial_downloads(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for name in ["video.m4a", "video.webm.part", "video.info.ytdl"]:
+                open(os.path.join(tmpdir, name), "w").close()
+
+            files = _downloaded_files(tmpdir)
+
+        assert files == [os.path.join(tmpdir, "video.m4a")]
+
+    def test_clear_downloads_removes_leftovers(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for name in ["video.m4a", "video.webm.part", "keep.txt"]:
+                open(os.path.join(tmpdir, name), "w").close()
+
+            _clear_downloads(tmpdir)
+
+            assert sorted(os.listdir(tmpdir)) == ["keep.txt"]
 
 
 class TestSearchYoutube:

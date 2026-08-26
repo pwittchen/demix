@@ -5,6 +5,7 @@ import glob as globmod
 import json
 import subprocess
 import os
+import shlex
 import shutil
 import sys
 import threading
@@ -243,41 +244,113 @@ def search_youtube(query):
     return video.watch_url, video.title
 
 
-def download_video(url, output_path):
-    os.makedirs(output_path, exist_ok=True)
-    if _check_yt_dlp():
-        output_template = os.path.join(output_path, "video.%(ext)s")
-        result = subprocess.run(
-            ["yt-dlp", "-f", "bestaudio/best", "-x", "-o", output_template, url],
-            capture_output=True, text=True
-        )
-        if result.returncode == 0:
-            # Find the downloaded file
-            files = globmod.glob(os.path.join(output_path, "video.*"))
-            if files:
-                return files[0]
-    # Fallback to pytubefix
+# yt-dlp download strategies, tried in order. YouTube keeps tightening which
+# player clients may fetch media without a PO token, and a blocked client fails
+# with HTTP 403 partway through the download rather than at extraction time - so
+# one fixed invocation is not enough. Each entry is (label, extra yt-dlp args).
+YT_DLP_STRATEGIES = (
+    ("default", []),
+    ("tv_simply", ["--extractor-args", "youtube:player_client=tv_simply"]),
+    ("web_embedded", ["--extractor-args", "youtube:player_client=web_embedded"]),
+    ("mweb", ["--extractor-args", "youtube:player_client=mweb"]),
+)
+
+
+def _yt_dlp_extra_args():
+    """Extra yt-dlp args from DEMIX_YT_DLP_ARGS, e.g. --cookies-from-browser chrome."""
+    return shlex.split(os.environ.get("DEMIX_YT_DLP_ARGS", ""))
+
+
+def _downloaded_files(output_path):
+    """Completed download files, ignoring yt-dlp's in-progress .part files."""
+    return [f for f in globmod.glob(os.path.join(output_path, "video.*"))
+            if not f.endswith((".part", ".ytdl"))]
+
+
+def _clear_downloads(output_path):
+    """Remove leftovers so a failed attempt is never mistaken for a success."""
+    for path in globmod.glob(os.path.join(output_path, "video.*")):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def _yt_dlp_error(stderr):
+    """Pick the most informative line out of yt-dlp's stderr."""
+    lines = [line.strip() for line in (stderr or "").splitlines() if line.strip()]
+    for line in reversed(lines):
+        if line.startswith("ERROR:"):
+            return line[len("ERROR:"):].strip()
+    return lines[-1] if lines else "no output"
+
+
+def _download_with_yt_dlp(url, output_path):
+    """Try each yt-dlp strategy in turn. Returns (downloaded_file_or_None, errors)."""
+    output_template = os.path.join(output_path, "video.%(ext)s")
+    user_args = _yt_dlp_extra_args()
+    errors = []
+    for label, strategy_args in YT_DLP_STRATEGIES:
+        _clear_downloads(output_path)
+        command = (["yt-dlp", "-f", "bestaudio/best", "-x", "--no-playlist"]
+                   + strategy_args + user_args + ["-o", output_template, url])
+        result = subprocess.run(command, capture_output=True, text=True)
+        files = _downloaded_files(output_path)
+        if result.returncode == 0 and files:
+            return files[0], errors
+        errors.append(f"yt-dlp [{label}]: {_yt_dlp_error(result.stderr)}")
+    _clear_downloads(output_path)
+    return None, errors
+
+
+def _download_with_pytubefix(url, output_path):
+    """Fallback downloader. Returns (downloaded_file_or_None, errors)."""
     from pytubefix import YouTube
-    from pytubefix.exceptions import BotDetection, RegexMatchError
     clients = ["WEB", "ANDROID_VR", "ANDROID", "IOS"]
-    last_error = None
+    errors = []
     for client in clients:
         try:
             yt = YouTube(url, client=client)
             stream = yt.streams.filter(only_audio=True).order_by("abr").desc().first()
             if stream is None:
+                errors.append(f"pytubefix [{client}]: no audio stream")
                 continue
             ext = stream.mime_type.split("/")[-1]
             filename = f"video.{ext}"
             stream.download(output_path=output_path, filename=filename)
-            return os.path.join(output_path, filename)
-        except (BotDetection, RegexMatchError, Exception) as e:
-            last_error = e
+            return os.path.join(output_path, filename), errors
+        except Exception as e:
+            errors.append(f"pytubefix [{client}]: {e}")
             continue
+    return None, errors
+
+
+def download_video(url, output_path):
+    os.makedirs(output_path, exist_ok=True)
+    errors = []
+
+    if _check_yt_dlp():
+        video_file, yt_dlp_errors = _download_with_yt_dlp(url, output_path)
+        if video_file:
+            return video_file
+        errors.extend(yt_dlp_errors)
+    else:
+        errors.append("yt-dlp: not installed (brew install yt-dlp)")
+
+    video_file, pytubefix_errors = _download_with_pytubefix(url, output_path)
+    if video_file:
+        return video_file
+    errors.extend(pytubefix_errors)
+
+    attempts = "\n".join(f"  - {error}" for error in errors)
     raise RuntimeError(
-        "Failed to download from YouTube. "
-        f"Last error: {last_error}. "
-        "Install yt-dlp (brew install yt-dlp) or use --file with a local audio file."
+        "Failed to download from YouTube. Attempts:\n"
+        f"{attempts}\n\n"
+        "YouTube may be rate-limiting this machine or requiring a PO token. Try:\n"
+        "  - brew upgrade yt-dlp (newer releases usually restore access)\n"
+        "  - passing browser cookies, e.g.\n"
+        "      DEMIX_YT_DLP_ARGS='--cookies-from-browser chrome' demix -u <url> ...\n"
+        "  - downloading the audio yourself and running demix with --file"
     )
 
 
