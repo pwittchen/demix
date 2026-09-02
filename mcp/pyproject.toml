@@ -33,7 +33,7 @@ classifiers = [
     "Topic :: Multimedia :: Sound/Audio",
 ]
 dependencies = [
-    "mcp>=1.0",
+    "mcp>=1.0,<3",
 ]
 
 [project.optional-dependencies]

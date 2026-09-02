@@ -15,18 +15,23 @@ Tools exposed:
 from __future__ import annotations
 
 import json
-import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Literal, Optional
 
-from mcp.server.fastmcp import FastMCP
+try:
+    # mcp SDK 2.x
+    from mcp.server.mcpserver import MCPServer as _Server
+except ImportError:  # pragma: no cover - depends on installed SDK
+    # mcp SDK 1.x, where the same class was called FastMCP
+    from mcp.server.fastmcp import FastMCP as _Server
 
 
-mcp = FastMCP("demix")
+mcp = _Server("demix")
 
 
 VALID_MODES = ("nosplit", "2stems", "4stems", "5stems")
@@ -316,7 +321,7 @@ def main() -> None:
         print(
             "warning: `demix` CLI not found on PATH. Tools will fail until "
             "demix is installed and reachable.",
-            file=__import__("sys").stderr,
+            file=sys.stderr,
         )
     mcp.run()
 

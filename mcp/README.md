@@ -32,6 +32,9 @@ pipx install ./mcp        # from a checkout of the demix repo
 Both `demix` and `demix-mcp` need to be reachable from the same PATH that
 your MCP client uses.
 
+The server works with both the 1.x and 2.x lines of the `mcp` SDK (in 2.x
+`FastMCP` was renamed to `MCPServer`); it picks whichever is installed.
+
 ## Configure an MCP client
 
 ### Claude Desktop / Claude Code
@@ -61,3 +64,15 @@ Pick a stable directory so spleeter models do not redownload every run.
 | `detect_key`     | Detect the musical key of a local audio file.                |
 | `search_youtube` | Resolve a search query to its top YouTube URL + title.       |
 | `clean`          | Remove demix output and/or cached spleeter models.           |
+
+## Troubleshooting
+
+Run `demix-mcp` in a terminal — it should start silently and wait for MCP
+messages on stdin. Common failures:
+
+- `ModuleNotFoundError: No module named 'mcp.server.fastmcp'` — an old
+  `demix-mcp` build against an `mcp` 2.x SDK. Reinstall:
+  `pipx install --force ./mcp`.
+- `demix CLI not found on PATH` — the demix 3.8 environment is not visible
+  to the MCP client. Point the client at the absolute path or add the
+  environment's `bin/` to the PATH the client launches with.
